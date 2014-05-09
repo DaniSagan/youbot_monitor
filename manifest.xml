@@ -1,0 +1,19 @@
+<package>
+  <description brief="youbot_monitor">
+
+     youbot_monitor
+
+  </description>
+  <author>daniel</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/youbot_monitor</url>
+  <depend package="std_msgs"/>
+  <depend package="rospy"/>
+  <depend package="roscpp"/>
+  <depend package="geometry_msgs"/>
+  <depend package="brics_actuator"/>
+
+</package>
+
+
