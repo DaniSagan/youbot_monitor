@@ -10,12 +10,17 @@ import wx
 import rospy
 import math
 
+SIMULATOR = True
+
 class Youbot:
     joints = [{"min": -169, "max": 169},
-              {"min":  -65, "max":  90},
-              {"min": -151, "max": 146},
+              #{"min":  -65, "max":  90},
+              {"min":    0, "max": 155},
+              #{"min": -151, "max": 146},
+              {"min": -146, "max": 151},
               {"min": -102, "max": 102},
-              {"min": -167, "max": 167}]
+              {"min": -167, "max": 167}]        
+        
 
 class MainWindow(wx.Frame):
     def __init__(self):
@@ -69,14 +74,14 @@ class MainWindow(wx.Frame):
         self.joint_pos_sliders[-1].Bind(wx.EVT_SLIDER, self.publish)
         
         self.joint_pos_sliders.append(wx.Slider(self.pos_panel, -1,
-                                                0, -65, 90,
+                                                90, 0, 155,
                                                 pos=(10, 80),
                                                 size=(500,-1),
                                                 style=wx.SL_AUTOTICKS | wx.SL_HORIZONTAL | wx.SL_LABELS))
         self.joint_pos_sliders[-1].Bind(wx.EVT_SLIDER, self.publish)
                                                 
         self.joint_pos_sliders.append(wx.Slider(self.pos_panel, -1,
-                                                0, -151, 146,
+                                                0, -146, 151,
                                                 pos=(10, 130),
                                                 size=(500,-1),
                                                 style=wx.SL_AUTOTICKS | wx.SL_HORIZONTAL | wx.SL_LABELS))
@@ -149,19 +154,16 @@ class MainWindow(wx.Frame):
                 value = self.joint_pos_sliders[k].GetValue()
                 print "joint", k, ":", value, "º"            
                 if k != 2:
-                    self.joint_pos_msg.positions[k].value = (value - Youbot.joints[k]["min"])*math.pi/180.0
+                    self.joint_pos_msg.positions[k].value = (Youbot.joints[k]["max"] - value)*math.pi/180.0
                 else:
-                    self.joint_pos_msg.positions[k].value = (value - Youbot.joints[k]["max"])*math.pi/180.0
+                    self.joint_pos_msg.positions[k].value = (Youbot.joints[k]["min"] - value)*math.pi/180.0
             print "-------------------------"
             self.pos_publisher.publish(self.joint_pos_msg) 
         elif self.controlling == "vel":
             for k in range(5):
                 value = self.joint_vel_sliders[k].GetValue()
                 print "joint", k, ":", value, "º/s"            
-                if k != 2:
-                    self.joint_vel_msg.velocities[k].value = value*math.pi/180.0
-                else:
-                    self.joint_vel_msg.velocities[k].value = value*math.pi/180.0
+                self.joint_vel_msg.velocities[k].value = -value*math.pi/180.0
                 if self.joint_current_pos[k] > Youbot.joints[k]["max"] - 5: 
                     self.joint_vel_msg.velocities[k].value = 0.0
                 if self.joint_current_pos[k] < Youbot.joints[k]["min"] + 5: 
@@ -184,13 +186,21 @@ class MainWindow(wx.Frame):
             self.pos_panel.Show()
             
     def pos_callback(self, data):
-        if len(data.position)  == 7:
+        if len(data.position) == 7:
             for k in range(5):
                 if k != 2: 
-                    self.joint_current_pos[k] = data.position[k]*180/math.pi + Youbot.joints[k]["min"]
+                    self.joint_current_pos[k] = Youbot.joints[k]["max"] - data.position[k]*180/math.pi 
                 else:      
-                    self.joint_current_pos[k] = data.position[k]*180/math.pi + Youbot.joints[k]["max"]
-                if self.joint_current_pos[k] > Youbot.joints[k]["max"] - 5:
+                    self.joint_current_pos[k] = Youbot.joints[k]["min"] - data.position[k]*180/math.pi
+            
+        if SIMULATOR:
+            for k in range(5):
+                if k != 2: 
+                    self.joint_current_pos[k] = Youbot.joints[k]["max"] - data.position[8+k]*180/math.pi 
+                else:      
+                    self.joint_current_pos[k] = Youbot.joints[k]["min"] - data.position[8+k]*180/math.pi
+            
+            """    if self.joint_current_pos[k] > Youbot.joints[k]["max"] - 5:
                     #self.joint_vel_msg.velocities[k].value = 0.0
                     #self.vel_publisher.publish(self.joint_vel_msg)
                     self.joint_pos_msg.positions[k].value = Youbot.joints[k]["max"] - 10
@@ -201,7 +211,7 @@ class MainWindow(wx.Frame):
                     #self.vel_publisher.publish(self.joint_vel_msg)
                     self.joint_pos_msg.positions[k].value = Youbot.joints[k]["min"] + 10
                     self.pos_publisher.publish(self.joint_pos_msg)
-                    print "El mecanismo de seguridad ha actuado en el motor", k 
+                    print "El mecanismo de seguridad ha actuado en el motor", k""" 
                     
                
             
