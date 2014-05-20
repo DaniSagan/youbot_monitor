@@ -8,6 +8,9 @@ from brics_actuator.msg import JointPositions
 from brics_actuator.msg import JointVelocities
 from brics_actuator.msg import JointValue
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import Point
+from std_msgs.msg import Float32MultiArray
+from youbot_monitor.msg import InvKinPose
 import numpy
 import math
 
@@ -33,6 +36,8 @@ class Youbot:
                              [ 0.0,  0.0, -1.0,  0.0, -146.0*DEG_TO_RAD],
                              [ 0.0,  0.0,  0.0, -1.0,  102.5*DEG_TO_RAD],
                              [ 0.0,  0.0,  0.0,  0.0,    1.0           ]])
+                             
+    _c_g_d = _c_d_g.getI()
                            
     _c_dd_dg = numpy.matrix([[-1.0,  0.0,  0.0,  0.0,  0.0],
                              [ 0.0, -1.0,  0.0,  0.0,  0.0],
@@ -46,6 +51,8 @@ class Youbot:
                              [ 0.0,  1.0,  1.0,  1.0,  0.0],
                              [ 0.0,  0.0,  0.0,  0.0,  1.0]])
                              
+    _c_t_d = _c_d_t.getI()
+                             
     _c_dt_dd = numpy.matrix([[ 1.0,  0.0,  0.0,  0.0,  0.0],
                              [ 0.0,  1.0,  0.0,  0.0,  0.0],
                              [ 0.0,  1.0,  1.0,  0.0,  0.0],
@@ -55,9 +62,10 @@ class Youbot:
     _L = [0.033, 0.155, 0.133, 0.218]
               
     def __init__(self):
-        rospy.init_node("youbot_test")
+        rospy.init_node("youbot_monitor")
         self.joint_current_pos = [0.0] * 5
         self.joint_current_vel = [0.0] * 5
+        self.joint_current_eff = [0.0] * 5
         self.joint_target_pos = [0.0] * 5
         self.joint_target_vel = [0.0] * 5
         self.controlling = "pos"
@@ -78,13 +86,18 @@ class Youbot:
             velocity.unit = "s^-1 rad"
             velocity.value = 0.0 
             
-        self.pos_subscriber = rospy.Subscriber("/joint_states", JointState, self.joint_pos_callback)
+        self.pos_subscriber = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
         
         self._curr_gammas = None
         self._curr_deltas = None
         self._curr_thetas = None
         
-    def joint_pos_callback(self, data):
+        self.pos_publisher = rospy.Publisher("/youbot_monitor/state/gripper_position", Point)
+        self.angs_publisher = rospy.Publisher("/youbot_monitor/state/arm_joint_angles", Float32MultiArray)
+        self.pos_cmd_subscriber = rospy.Subscriber("/youbot_monitor/controller/gripper_position", InvKinPose, self.pos_cmd_callback)
+        self.angs_cmd_subscriber = rospy.Subscriber("/youbot_monitor/controller/arm_joint_angles", Float32MultiArray, self.angs_cmd_callback)
+        
+    def joint_state_callback(self, data):
         if len(data.position) == 7:
             for k in range(5):
                 if k != 2: 
@@ -94,69 +107,38 @@ class Youbot:
             
         if SIMULATOR:
             gammas = numpy.matrix([[data.position[8+k] for k in range(4)] + [1]]).transpose()
-            #print "gammas:", gammas
             self._curr_gammas = gammas
-            #print "Cdg:", Youbot._c_d_g.getI()
-            #print "deltas:", Youbot._c_d_g.getI()*gammas
             self._curr_deltas = Youbot._c_d_g.getI()*gammas
-            #print "thetas:", Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
             self._curr_thetas = Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
-            #print "curr_pos:", self.get_pos()    
-            #print "thetas 0:", self.get_thetas_for_pos(self.get_pos(), theta3=self._curr_thetas[3], solution=0)  
-            #print "thetas 1:", self.get_thetas_for_pos(self.get_pos(), theta3=self._curr_thetas[3], solution=1)    
-            #print "thetas 2:", self.get_thetas_for_pos(self.get_pos(), theta3=self._curr_thetas[3], solution=2)
-            #print "thetas 3:", self.get_thetas_for_pos(self.get_pos(), theta3=self._curr_thetas[3], solution=3)
+            #print "curr_deltas", self._curr_deltas
+            self.joint_curr_pos = [self._curr_deltas[k,0] for k in range(4)] + [Youbot.joint_limits[4]["max"] - data.position[12]]
+            self.joint_curr_eff = [data.effort[8+k] for k in range(5)]
+            #print "curr_pos:", self.joint_curr_pos
+            #print "curr_eff:", self.joint_curr_eff
             
     def get_x_cil(self):
-        thetas = [self._curr_thetas[k] for k in range(4)]
-        return Youbot._L[0] + Youbot._L[1]*math.cos(thetas[1]) + Youbot._L[2]*math.cos(thetas[2]) + Youbot._L[3]*math.cos(thetas[3])
+        if self._curr_thetas != None:
+            thetas = [self._curr_thetas[k] for k in range(4)]
+            return Youbot._L[0] + Youbot._L[1]*math.cos(thetas[1]) + Youbot._L[2]*math.cos(thetas[2]) + Youbot._L[3]*math.cos(thetas[3])
+        else:
+            return 0.0 
         
     def get_y_cil(self):
-        thetas = [self._curr_thetas[k] for k in range(4)]
-        return Youbot._L[1]*math.sin(thetas[1]) + Youbot._L[2]*math.sin(thetas[2]) + Youbot._L[3]*math.sin(thetas[3])
+        if self._curr_thetas != None:
+            thetas = [self._curr_thetas[k] for k in range(4)]
+            return Youbot._L[1]*math.sin(thetas[1]) + Youbot._L[2]*math.sin(thetas[2]) + Youbot._L[3]*math.sin(thetas[3])
+        else:
+            return 0.0
         
     def get_pos_cil(self):
         return self.get_x_cil(), self.get_y_cil() 
         
     def get_pos(self):
-        X, Y = self.get_pos_cil()
-        return X*math.cos(self._curr_thetas[0]), X*math.sin(self._curr_thetas[0]), Y
-        
-    """def get_thetas_for_pos(self, pos, theta3=0.0, solution=0):
-        x, y, z = pos
-        theta0 = math.atan2(y, x)
-        X = x / math.cos(theta0)
-        Y = z
-        
-        if solution == 2 or solution == 3:
-            X3 = -(Youbot._L[0] + X - Youbot._L[3]*math.cos(theta3))#-(X - Youbot._L[3]*math.cos(theta3) + 2*Youbot._L[0])
+        if self._curr_thetas != None:
+            X, Y = self.get_pos_cil()
+            return X*math.cos(self._curr_thetas[0]), X*math.sin(self._curr_thetas[0]), Y
         else:
-            X3 = X - Youbot._L[3]*math.cos(theta3) - Youbot._L[0]
-        Y3 = Y - Youbot._L[3]*math.sin(theta3)
-        D = (X3**2 + Y3**2)**0.5
-        phi = math.atan2(Y3, X3)
-        
-        print "X3, Y3:", X3, Y3
-        print "cos alpha:", (Youbot._L[1]**2 - Youbot._L[2]**2 + D**2)/(2*Youbot._L[1]*D)
-        print "cos beta:", (Youbot._L[2]**2 - Youbot._L[1]**2 + D**2)/(2*Youbot._L[2]*D)
-        
-        try:
-            alpha = math.acos((Youbot._L[1]**2 - Youbot._L[2]**2 + D**2)/(2*Youbot._L[1]*D))
-            beta = math.acos((Youbot._L[2]**2 - Youbot._L[1]**2 + D**2)/(2*Youbot._L[2]*D))
-        except:
-            return None
-        if solution == 0:
-            return [theta0, phi + alpha, phi - beta, theta3[0,0]]
-        elif solution == 1:
-            return [theta0, phi - alpha, phi + beta, theta3[0,0]]
-        elif solution == 2:
-            if theta0 < 0: theta0 += math.pi
-            else: theta0 -= math.pi  
-            return [theta0, phi + alpha, phi - beta, theta3[0,0]]
-        elif solution == 3:
-            if theta0 < 0: theta0 += math.pi
-            else: theta0 -= math.pi
-            return [theta0, phi - alpha, phi + beta, theta3[0,0]]"""
+            return 0.0, 0.0, 0.0
             
     def get_thetas_for_pos(self, pos, theta3=0.0, solution=0):
         assert solution in [0, 1, 2, 3]
@@ -179,10 +161,11 @@ class Youbot:
         if not s: return None
         else: return [theta0, s[0], s[1], theta3]
         
-    def move_arm_to_pos(self, pos, solution=0):
-        tt = self.get_thetas_for_pos(pos, theta3=0.0, solution=0)
+    def move_arm_to_pos(self, pos, theta3=0.0, solution=0):
+        tt = self.get_thetas_for_pos(pos, theta3, solution=0)
         if not tt: return 
-        thetas = numpy.matrix([self.get_thetas_for_pos(pos, theta3=0.0, solution=solution) + [1]]).transpose()
+        #thetas = numpy.matrix([self.get_thetas_for_pos(pos, theta3=0.0, solution=solution) + [1]]).transpose()
+        thetas = numpy.matrix([tt + [1.0]]).transpose()
         deltas = Youbot._c_d_t.getI()*thetas
         gammas = Youbot._c_d_g*Youbot._c_d_t.getI()*thetas
         for k, d in enumerate(deltas):
@@ -191,7 +174,38 @@ class Youbot:
                 return
         for k, position in enumerate(self.joint_pos_msg.positions):
             position.value = gammas[k, 0]
-        self.joint_pos_publisher.publish(self.joint_pos_msg)      
+        self.joint_pos_publisher.publish(self.joint_pos_msg) 
+        
+    def set_joint_deltas(self, deltas):
+        assert len(deltas) == 5
+        dd = numpy.matrix(deltas[:-1]+[1.0]).transpose()
+        print "dd:",  dd
+        gg = Youbot._c_d_g*dd
+        print "gg:", gg
+        for k, position in enumerate(self.joint_pos_msg.positions):
+            if k != 4: position.value = gg[k, 0]
+            else: position.value = Youbot.joint_limits[4]["max"] - deltas[4]
+        self.joint_pos_publisher.publish(self.joint_pos_msg)
+        
+    def publish_state(self):
+        x, y, z = self.get_pos()
+        pos = Point()
+        pos.x, pos.y, pos.z = x, y, z
+        self.pos_publisher.publish(pos)
+        
+        if self._curr_deltas != None:  
+            angs = Float32MultiArray()
+            angs.data = list(self._curr_deltas) 
+            self.angs_publisher.publish(angs) 
+            
+    def pos_cmd_callback(self, data):
+        if data.solution in [0, 1, 2, 3]:
+            pos = data.target_position.x, data.target_position.y, data.target_position.z
+            self.move_arm_to_pos(pos, data.effector_angle, data.solution)        
+        
+    def angs_cmd_callback(self, data):
+        if len(data.data) == 5:
+            self.set_joint_deltas(data.data)
             
             
 def solve_simple_arm(pos, L0, L1, solution=0):
@@ -223,39 +237,44 @@ def main():
     youbot = Youbot()
     pos = (0.35, -0.34, -0.05)      
     youbot.move_arm_to_pos(pos, solution=SOLUTION)
+    youbot.publish_state()
     rospy.sleep(5.0)
     while not rospy.is_shutdown():
         for k in range(136):
             t = 0.1*k
             v = 0.05
-            rospy.loginfo("t: %s", t)
+            #rospy.loginfo("t: %s", t)
             pos = (0.36, -0.34 + v*t, -0.05) 
             #print "target_pos:", pos     
             youbot.move_arm_to_pos(pos, solution=SOLUTION)
+            youbot.publish_state()
             rospy.sleep(0.1)
         for k in range(40):
             t = 0.1*k
             v = 0.05
-            rospy.loginfo("t: %s", t)
+            #rospy.loginfo("t: %s", t)
             pos = (0.36, 0.34, -0.05 + v*t) 
             #print "target_pos:", pos     
             youbot.move_arm_to_pos(pos, solution=SOLUTION)
+            youbot.publish_state()
             rospy.sleep(0.1)
         for k in range(136):
             t = 0.1*k
             v = 0.05
-            rospy.loginfo("t: %s", t)
+            #rospy.loginfo("t: %s", t)
             pos = (0.36, 0.34 - v*t, 0.15) 
             #print "target_pos:", pos     
             youbot.move_arm_to_pos(pos, solution=SOLUTION)
+            youbot.publish_state()
             rospy.sleep(0.1)
         for k in range(40):
             t = 0.1*k
             v = 0.05
-            rospy.loginfo("t: %s", t)
+            #rospy.loginfo("t: %s", t)
             pos = (0.36, -0.34, 0.15 - v*t) 
             #print "target_pos:", pos     
             youbot.move_arm_to_pos(pos, solution=SOLUTION)
+            youbot.publish_state()
             rospy.sleep(0.1)
     
             
