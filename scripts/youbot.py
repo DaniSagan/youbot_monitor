@@ -18,6 +18,12 @@ RAD_TO_DEG = 180.0 / math.pi
 DEG_TO_RAD = math.pi / 180.0
 SIMULATOR = True
 
+def extended_vector(value_list):
+    return numpy.matrix(value_list + [1.0]).transpose()
+    
+def normal_list(ext_vector):
+    return [ext_vector[k,0] for k in range(ext_vector.shape[0] - 1)]
+
 class Youbot:
     joint_limits = [{"min": -169.0*DEG_TO_RAD, "max": 169.0*DEG_TO_RAD},
                     {"min":    0.0*DEG_TO_RAD, "max": 155.0*DEG_TO_RAD},
@@ -31,33 +37,35 @@ class Youbot:
                      102.5 * DEG_TO_RAD,
                      167.5 * DEG_TO_RAD]
                      
-    _c_d_g =   numpy.matrix([[-1.0,  0.0,  0.0,  0.0,  169.0*DEG_TO_RAD],
-                             [ 0.0, -1.0,  0.0,  0.0,  155.0*DEG_TO_RAD],
-                             [ 0.0,  0.0, -1.0,  0.0, -146.0*DEG_TO_RAD],
-                             [ 0.0,  0.0,  0.0, -1.0,  102.5*DEG_TO_RAD],
-                             [ 0.0,  0.0,  0.0,  0.0,    1.0           ]])
+    _c_d_g =   numpy.matrix([[-1.0,  0.0,  0.0,  0.0,  0.0,  joint_limits[0]["max"]],
+                             [ 0.0, -1.0,  0.0,  0.0,  0.0,  joint_limits[1]["max"]],
+                             [ 0.0,  0.0, -1.0,  0.0,  0.0,  joint_limits[2]["min"]],
+                             [ 0.0,  0.0,  0.0, -1.0,  0.0,  joint_limits[3]["max"]],
+                             [ 0.0,  0.0,  0.0,  0.0, -1.0,  joint_limits[4]["max"]],                             
+                             [ 0.0,  0.0,  0.0,  0.0,  0.0,  1.0                   ]])
                              
     _c_g_d = _c_d_g.getI()
                            
-    _c_dd_dg = numpy.matrix([[-1.0,  0.0,  0.0,  0.0,  0.0],
+    """_c_dd_dg = numpy.matrix([[-1.0,  0.0,  0.0,  0.0,  0.0],
                              [ 0.0, -1.0,  0.0,  0.0,  0.0],
                              [ 0.0,  0.0, -1.0,  0.0,  0.0],
                              [ 0.0,  0.0,  0.0, -1.0,  0.0],
-                             [ 0.0,  0.0,  0.0,  0.0,  1.0]])
+                             [ 0.0,  0.0,  0.0,  0.0,  1.0]])"""
                              
-    _c_d_t =   numpy.matrix([[ 1.0,  0.0,  0.0,  0.0,  0.0],
-                             [ 0.0,  1.0,  0.0,  0.0,  0.0],
-                             [ 0.0,  1.0,  1.0,  0.0,  0.0],
-                             [ 0.0,  1.0,  1.0,  1.0,  0.0],
-                             [ 0.0,  0.0,  0.0,  0.0,  1.0]])
+    _c_d_t =   numpy.matrix([[ 1.0,  0.0,  0.0,  0.0,  0.0,  0.0],
+                             [ 0.0,  1.0,  0.0,  0.0,  0.0,  0.0],
+                             [ 0.0,  1.0,  1.0,  0.0,  0.0,  0.0],
+                             [ 0.0,  1.0,  1.0,  1.0,  0.0,  0.0],
+                             [ 0.0,  0.0,  0.0,  0.0,  1.0,  0.0],
+                             [ 0.0,  0.0,  0.0,  0.0,  0.0,  1.0]])
                              
     _c_t_d = _c_d_t.getI()
                              
-    _c_dt_dd = numpy.matrix([[ 1.0,  0.0,  0.0,  0.0,  0.0],
+    """_c_dt_dd = numpy.matrix([[ 1.0,  0.0,  0.0,  0.0,  0.0],
                              [ 0.0,  1.0,  0.0,  0.0,  0.0],
                              [ 0.0,  1.0,  1.0,  0.0,  0.0],
                              [ 0.0,  1.0,  1.0,  1.0,  0.0],
-                             [ 0.0,  0.0,  0.0,  0.0,  1.0]])
+                             [ 0.0,  0.0,  0.0,  0.0,  1.0]])"""
                              
     _L = [0.033, 0.155, 0.133, 0.218]
               
@@ -106,15 +114,12 @@ class Youbot:
                     self.joint_current_pos[k] = Youbot.joints[k]["min"] - data.position[k]
             
         if SIMULATOR:
-            gammas = numpy.matrix([[data.position[8+k] for k in range(4)] + [1]]).transpose()
+            gammas = extended_vector(list(data.position)[8:13])
             self._curr_gammas = gammas
             self._curr_deltas = Youbot._c_d_g.getI()*gammas
             self._curr_thetas = Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
-            #print "curr_deltas", self._curr_deltas
-            self.joint_curr_pos = [self._curr_deltas[k,0] for k in range(4)] + [Youbot.joint_limits[4]["max"] - data.position[12]]
-            self.joint_curr_eff = [data.effort[8+k] for k in range(5)]
-            #print "curr_pos:", self.joint_curr_pos
-            #print "curr_eff:", self.joint_curr_eff
+            self.joint_curr_pos = normal_list(self._curr_deltas)
+            self.joint_curr_eff = data.effort[8:13]
             
     def get_x_cil(self):
         if self._curr_thetas != None:
@@ -162,14 +167,13 @@ class Youbot:
         else: return [theta0, s[0], s[1], theta3]
         
     def move_arm_to_pos(self, pos, theta3=0.0, solution=0):
-        tt = self.get_thetas_for_pos(pos, theta3, solution=0)
+        tt = self.get_thetas_for_pos(pos, theta3, solution=0) + [0.0]
         if not tt: return 
-        #thetas = numpy.matrix([self.get_thetas_for_pos(pos, theta3=0.0, solution=solution) + [1]]).transpose()
-        thetas = numpy.matrix([tt + [1.0]]).transpose()
+        thetas = extended_vector(tt)
         deltas = Youbot._c_d_t.getI()*thetas
         gammas = Youbot._c_d_g*Youbot._c_d_t.getI()*thetas
         for k, d in enumerate(deltas):
-            if d < Youbot.joint_limits[k]["min"] or d > Youbot.joint_limits[k]["max"]:
+            if k < deltas.shape[0] - 1 and (d < Youbot.joint_limits[k]["min"] or d > Youbot.joint_limits[k]["max"]):
                 rospy.logerr("Position not reachable")
                 return
         for k, position in enumerate(self.joint_pos_msg.positions):
@@ -178,13 +182,12 @@ class Youbot:
         
     def set_joint_deltas(self, deltas):
         assert len(deltas) == 5
-        dd = numpy.matrix(deltas[:-1]+[1.0]).transpose()
+        dd = extended_vector(deltas)
         print "dd:",  dd
         gg = Youbot._c_d_g*dd
         print "gg:", gg
         for k, position in enumerate(self.joint_pos_msg.positions):
-            if k != 4: position.value = gg[k, 0]
-            else: position.value = Youbot.joint_limits[4]["max"] - deltas[4]
+            position.value = gg[k, 0]
         self.joint_pos_publisher.publish(self.joint_pos_msg)
         
     def publish_state(self):
@@ -206,6 +209,11 @@ class Youbot:
     def angs_cmd_callback(self, data):
         if len(data.data) == 5:
             self.set_joint_deltas(data.data)
+            
+    def spin(self):
+        while not rospy.is_shutdown():
+            self.publish_state()
+            
             
             
 def solve_simple_arm(pos, L0, L1, solution=0):
@@ -230,7 +238,10 @@ def solve_simple_arm(pos, L0, L1, solution=0):
 
 def main():
     
-    #print solve_simple_arm((-0.4, 0.5), 0.4, 0.5, solution=0)
+    yb = Youbot()
+    yb.spin()
+    
+    """#print solve_simple_arm((-0.4, 0.5), 0.4, 0.5, solution=0)
     #print solve_simple_arm((-0.4, 0.5), 0.4, 0.5, solution=1)
     SOLUTION = 0
     
@@ -275,7 +286,7 @@ def main():
             #print "target_pos:", pos     
             youbot.move_arm_to_pos(pos, solution=SOLUTION)
             youbot.publish_state()
-            rospy.sleep(0.1)
+            rospy.sleep(0.1)"""
     
             
 if __name__ == "__main__": main()

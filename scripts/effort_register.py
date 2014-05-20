@@ -6,10 +6,10 @@ import rospy
 import roslib; roslib.load_manifest("youbot_monitor")
 import numpy
 import math
-import youbot
+from youbot_monitor.msg import InvKinPose
 
 def main():
-    yb = youbot.Youbot()
+    rospy.
     
     """aa = [45*youbot.DEG_TO_RAD, 90*youbot.DEG_TO_RAD]
     angs_v = [[0.0, t1, t2, t3, 0.0] for t1 in aa for t2 in aa for t3 in aa]
@@ -23,7 +23,7 @@ def main():
         
     while True:
         yb.publish_state()
-        yb.set_joint_deltas([0.0, 45.0*youbot.DEG_TO_RAD, 0.0, 0.0, 0.0])
+        yb.set_joint_deltas([0.0, 90.0*youbot.DEG_TO_RAD, 0.0, 0.0, 0.0])
         yb.publish_state()
         rospy.sleep(0.01)
     

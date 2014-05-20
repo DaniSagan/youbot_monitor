@@ -25,7 +25,7 @@ class Youbot:
 class MainWindow(wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self, None, style=wx.SYSTEM_MENU | wx.CAPTION | wx.CLOSE_BOX | wx.CLIP_CHILDREN)
-        rospy.init_node("youbot_monitor")
+        rospy.init_node("arm_controller")
         self.init_ui()
         self.controlling = "pos"
         
