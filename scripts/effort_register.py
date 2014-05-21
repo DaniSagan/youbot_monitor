@@ -11,6 +11,9 @@ from youbot_monitor.msg import InvKinPose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import JointState
 import json
+import urllib2
+import urllib
+import datetime
 
 curr_joint_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
 target_joint_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -50,17 +53,18 @@ def main():
             next_file = False
             while not rospy.is_shutdown() and not next_file:
                 curr_time = rospy.get_rostime()
-                json_str = json.dumps({u"time": str(curr_time),
-                                       u"curr_joint_angles": curr_joint_angles,
-                                       u"target_joint_angles": target_joint_angles,
-                                       u"curr_joint_effort": curr_joint_effort})
+                json_str = json.dumps({"time": str(curr_time),
+                                       "curr_joint_angles": curr_joint_angles,
+                                       "target_joint_angles": target_joint_angles,
+                                       "curr_joint_effort": curr_joint_effort})
                 f.write(json_str + "\n")
                 rospy.sleep(0.01)
                 read_count = rospy.get_param("angle_generator_count")
                 if read_count != curr_count or not rospy.get_param("running"): 
                     next_file = True
-                    
     
+    info = urllib.urlencode({"info": "\nFinished %s\n" % str(datetime.datetime.now())})                
+    urllib2.urlopen("http://danisagan-cc.netau.net/loginfo.php?" + info)
            
     
 if __name__ == "__main__": main()
