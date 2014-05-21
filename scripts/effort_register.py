@@ -6,26 +6,51 @@ import rospy
 import roslib; roslib.load_manifest("youbot_monitor")
 import numpy
 import math
+from geometry_msgs.msg import Point
 from youbot_monitor.msg import InvKinPose
+from std_msgs.msg import Float32MultiArray
+from sensor_msgs.msg import JointState
+import json
+
+curr_joint_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
+target_joint_angles = [0.0, 0.0, 0.0, 0.0, 0.0]
+curr_joint_effort = [0.0, 0.0, 0.0, 0.0, 0.0]
+
+def joint_angles_callback(data):
+    global curr_joint_angles
+    curr_joint_angles = list(data.data)
+    
+def joint_states_callback(data):
+    global curr_joint_effort
+    curr_joint_effort = list(data.effort)
+    
+def joint_angles_cmd_callback(data):
+    global target_joint_angles
+    target_joint_angles = list(data.data)
 
 def main():
-    rospy.
+    global curr_joint_angles
+    global target_joint_angles
+    global curr_joint_effort
     
-    """aa = [45*youbot.DEG_TO_RAD, 90*youbot.DEG_TO_RAD]
-    angs_v = [[0.0, t1, t2, t3, 0.0] for t1 in aa for t2 in aa for t3 in aa]
-    print angs_v
-    rospy.sleep(5.0)
+    rospy.init_node("effort_register")
+    arm_joint_angles_sub = rospy.Subscriber("/youbot_monitor/state/arm_joint_angles", Float32MultiArray, joint_angles_callback)
+    joint_states_sub= rospy.Subscriber("/joint_states", JointState, joint_states_callback)
+    target_joint_angles_sub = rospy.Subscriber("/youbot_monitor/controller/arm_joint_angles", Float32MultiArray, joint_angles_cmd_callback)
     
-    for angs in angs_v:
-        yb.set_joint_deltas(angs)
-        print [ang*youbot.RAD_TO_DEG for ang in angs]
-        rospy.sleep(10.0)"""
-        
-    while True:
-        yb.publish_state()
-        yb.set_joint_deltas([0.0, 90.0*youbot.DEG_TO_RAD, 0.0, 0.0, 0.0])
-        yb.publish_state()
-        rospy.sleep(0.01)
-    
+    with open("log.txt", "w") as f:
+        while not rospy.is_shutdown():
+            curr_time = rospy.get_rostime()
+            json_str = json.dumps({"time": str(curr_time),
+                                   "curr_joint_angles": curr_joint_angles,
+                                   "target_joint_angles": target_joint_angles,
+                                   "curr_joint_effort": curr_joint_effort})
+            """json_str = json.dumps({"time": curr_time, 
+                                   "curr_joint_angles": curr_joint_angles, 
+                                   "target_joint_angles": target_joint_angles,
+                                   "curr_joint_effort": curr_joint_effort})"""
+            f.write(json_str + "\n")
+            rospy.sleep(0.01)
+           
     
 if __name__ == "__main__": main()

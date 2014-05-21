@@ -100,8 +100,8 @@ class Youbot:
         self._curr_deltas = None
         self._curr_thetas = None
         
-        self.pos_publisher = rospy.Publisher("/youbot_monitor/state/gripper_position", Point)
-        self.angs_publisher = rospy.Publisher("/youbot_monitor/state/arm_joint_angles", Float32MultiArray)
+        self.pos_publisher = rospy.Publisher("/youbot_monitor/state/gripper_position", Point, latch=True)
+        self.angs_publisher = rospy.Publisher("/youbot_monitor/state/arm_joint_angles", Float32MultiArray, latch=True)
         self.pos_cmd_subscriber = rospy.Subscriber("/youbot_monitor/controller/gripper_position", InvKinPose, self.pos_cmd_callback)
         self.angs_cmd_subscriber = rospy.Subscriber("/youbot_monitor/controller/arm_joint_angles", Float32MultiArray, self.angs_cmd_callback)
         
@@ -182,10 +182,8 @@ class Youbot:
         
     def set_joint_deltas(self, deltas):
         assert len(deltas) == 5
-        dd = extended_vector(deltas)
-        print "dd:",  dd
+        dd = extended_vector(list(deltas))
         gg = Youbot._c_d_g*dd
-        print "gg:", gg
         for k, position in enumerate(self.joint_pos_msg.positions):
             position.value = gg[k, 0]
         self.joint_pos_publisher.publish(self.joint_pos_msg)
@@ -202,17 +200,21 @@ class Youbot:
             self.angs_publisher.publish(angs) 
             
     def pos_cmd_callback(self, data):
+        rospy.loginfo("Received gripper position command: [%f, %f, %f]" % (data.target_position.x, data.target_position.y, data.target_position.z))
         if data.solution in [0, 1, 2, 3]:
             pos = data.target_position.x, data.target_position.y, data.target_position.z
             self.move_arm_to_pos(pos, data.effector_angle, data.solution)        
         
     def angs_cmd_callback(self, data):
+        print data.data
+        rospy.loginfo("Received joint angles command: %s" % [d for d in data.data])
         if len(data.data) == 5:
             self.set_joint_deltas(data.data)
             
     def spin(self):
         while not rospy.is_shutdown():
             self.publish_state()
+            rospy.sleep(0.01)
             
             
             
