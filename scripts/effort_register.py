@@ -18,7 +18,7 @@ curr_joint_effort = [0.0, 0.0, 0.0, 0.0, 0.0]
 
 def joint_angles_callback(data):
     global curr_joint_angles
-    curr_joint_angles = list(data.data)
+    curr_joint_angles = [d*180/math.pi for d in data.data]#list(data.data)
     
 def joint_states_callback(data):
     global curr_joint_effort
@@ -26,7 +26,7 @@ def joint_states_callback(data):
     
 def joint_angles_cmd_callback(data):
     global target_joint_angles
-    target_joint_angles = list(data.data)
+    target_joint_angles = [d*180/math.pi for d in data.data]#list(data.data)
 
 def main():
     global curr_joint_angles
@@ -38,19 +38,29 @@ def main():
     joint_states_sub= rospy.Subscriber("/joint_states", JointState, joint_states_callback)
     target_joint_angles_sub = rospy.Subscriber("/youbot_monitor/controller/arm_joint_angles", Float32MultiArray, joint_angles_cmd_callback)
     
-    with open("log.txt", "w") as f:
-        while not rospy.is_shutdown():
-            curr_time = rospy.get_rostime()
-            json_str = json.dumps({"time": str(curr_time),
-                                   "curr_joint_angles": curr_joint_angles,
-                                   "target_joint_angles": target_joint_angles,
-                                   "curr_joint_effort": curr_joint_effort})
-            """json_str = json.dumps({"time": curr_time, 
-                                   "curr_joint_angles": curr_joint_angles, 
-                                   "target_joint_angles": target_joint_angles,
-                                   "curr_joint_effort": curr_joint_effort})"""
-            f.write(json_str + "\n")
-            rospy.sleep(0.01)
+    rospy.loginfo("Waiting for node angles_generator...")
+    rospy.delete_param("running")
+    while not rospy.has_param("running"):
+        rospy.sleep(0.01)
+    next_file = False
+    while rospy.get_param("running"):
+        curr_count = rospy.get_param("angle_generator_count")
+        with open("log" + str(curr_count) + ".txt", "w") as f:
+            rospy.loginfo("Writing file %s", f.name)
+            next_file = False
+            while not rospy.is_shutdown() and not next_file:
+                curr_time = rospy.get_rostime()
+                json_str = json.dumps({u"time": str(curr_time),
+                                       u"curr_joint_angles": curr_joint_angles,
+                                       u"target_joint_angles": target_joint_angles,
+                                       u"curr_joint_effort": curr_joint_effort})
+                f.write(json_str + "\n")
+                rospy.sleep(0.01)
+                read_count = rospy.get_param("angle_generator_count")
+                if read_count != curr_count or not rospy.get_param("running"): 
+                    next_file = True
+                    
+    
            
     
 if __name__ == "__main__": main()

@@ -106,12 +106,12 @@ class Youbot:
         self.angs_cmd_subscriber = rospy.Subscriber("/youbot_monitor/controller/arm_joint_angles", Float32MultiArray, self.angs_cmd_callback)
         
     def joint_state_callback(self, data):
-        if len(data.position) == 7:
+        """if len(data.position) == 7:
             for k in range(5):
                 if k != 2: 
                     self.joint_current_pos[k] = Youbot.joints[k]["max"] - data.position[k] 
                 else:      
-                    self.joint_current_pos[k] = Youbot.joints[k]["min"] - data.position[k]
+                    self.joint_current_pos[k] = Youbot.joints[k]["min"] - data.position[k]"""
             
         if SIMULATOR:
             gammas = extended_vector(list(data.position)[8:13])
@@ -120,6 +120,15 @@ class Youbot:
             self._curr_thetas = Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
             self.joint_curr_pos = normal_list(self._curr_deltas)
             self.joint_curr_eff = data.effort[8:13]
+            
+        else:
+            if len(data.position) == 7:
+                gammas = extended_vector(list(data.position)[0:6])
+                self._curr_gammas = gammas
+                self._curr_deltas = Youbot._c_d_g.getI()*gammas
+                self._curr_thetas = Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
+                self.joint_curr_pos = normal_list(self._curr_deltas)
+                self.joint_curr_eff = data.effort[0:6]
             
     def get_x_cil(self):
         if self._curr_thetas != None:
@@ -242,53 +251,6 @@ def main():
     
     yb = Youbot()
     yb.spin()
-    
-    """#print solve_simple_arm((-0.4, 0.5), 0.4, 0.5, solution=0)
-    #print solve_simple_arm((-0.4, 0.5), 0.4, 0.5, solution=1)
-    SOLUTION = 0
-    
-    youbot = Youbot()
-    pos = (0.35, -0.34, -0.05)      
-    youbot.move_arm_to_pos(pos, solution=SOLUTION)
-    youbot.publish_state()
-    rospy.sleep(5.0)
-    while not rospy.is_shutdown():
-        for k in range(136):
-            t = 0.1*k
-            v = 0.05
-            #rospy.loginfo("t: %s", t)
-            pos = (0.36, -0.34 + v*t, -0.05) 
-            #print "target_pos:", pos     
-            youbot.move_arm_to_pos(pos, solution=SOLUTION)
-            youbot.publish_state()
-            rospy.sleep(0.1)
-        for k in range(40):
-            t = 0.1*k
-            v = 0.05
-            #rospy.loginfo("t: %s", t)
-            pos = (0.36, 0.34, -0.05 + v*t) 
-            #print "target_pos:", pos     
-            youbot.move_arm_to_pos(pos, solution=SOLUTION)
-            youbot.publish_state()
-            rospy.sleep(0.1)
-        for k in range(136):
-            t = 0.1*k
-            v = 0.05
-            #rospy.loginfo("t: %s", t)
-            pos = (0.36, 0.34 - v*t, 0.15) 
-            #print "target_pos:", pos     
-            youbot.move_arm_to_pos(pos, solution=SOLUTION)
-            youbot.publish_state()
-            rospy.sleep(0.1)
-        for k in range(40):
-            t = 0.1*k
-            v = 0.05
-            #rospy.loginfo("t: %s", t)
-            pos = (0.36, -0.34, 0.15 - v*t) 
-            #print "target_pos:", pos     
-            youbot.move_arm_to_pos(pos, solution=SOLUTION)
-            youbot.publish_state()
-            rospy.sleep(0.1)"""
     
             
 if __name__ == "__main__": main()
