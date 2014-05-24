@@ -123,12 +123,12 @@ class Youbot:
             
         else:
             if len(data.position) == 7:
-                gammas = extended_vector(list(data.position)[0:6])
+                gammas = extended_vector(list(data.position)[0:5])
                 self._curr_gammas = gammas
                 self._curr_deltas = Youbot._c_d_g.getI()*gammas
                 self._curr_thetas = Youbot._c_d_t*Youbot._c_d_g.getI()*gammas
                 self.joint_curr_pos = normal_list(self._curr_deltas)
-                self.joint_curr_eff = data.effort[0:6]
+                self.joint_curr_eff = data.effort[0:5]
             
     def get_x_cil(self):
         if self._curr_thetas != None:
